@@ -1,0 +1,18 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Данные NASA скачиваются скриптом download_data.py (около 130 МБ), в репозитории их нет
+data/
+
+# Фронтенд: зависимости и сборка (подробнее в frontend/.gitignore)
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+
+# IDE
+.idea/
+
+# README хранится только локально
+/README.md

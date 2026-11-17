@@ -1,0 +1,8 @@
+# В образ идёт только исходный код: зависимости, сборка и данные создаются внутри него
+.git
+.venv
+__pycache__
+data
+frontend/node_modules
+frontend/dist
+frontend/.angular

@@ -1,0 +1,370 @@
+<div class="progress" [class.on]="loading()"></div>
+
+<div class="shell">
+  <!-- ---------- боковая панель ---------- -->
+  <aside class="sidebar">
+    <div class="brand">
+      <svg width="38" height="38" viewBox="0 0 38 38" fill="none" aria-hidden="true">
+        <rect width="38" height="38" rx="10" fill="#E9C46A" />
+        <circle cx="19" cy="19" r="10.5" stroke="#264653" stroke-width="1.4" />
+        <path d="M8.5 19h21M19 8.5c-4 3-4 18 0 21M19 8.5c4 3 4 18 0 21" stroke="#264653" stroke-width="1" opacity=".55" />
+        <path d="M10 24.5l5-4 4 2.5 8.5-9" stroke="#264653" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      <div>
+        <div class="brand-name">Trend Detective</div>
+        <div class="brand-sub">Earth System</div>
+      </div>
+      <button type="button" class="filters-toggle" [class.open]="filtersOpen()" aria-controls="filters"
+              [attr.aria-expanded]="filtersOpen()" (click)="filtersOpen.set(!filtersOpen())">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" aria-hidden="true"><path d="M2 4.5h12M4.5 8h7M6.5 11.5h3" /></svg>
+        {{ tx.filters }}
+      </button>
+    </div>
+    @if (!filtersOpen() && filterSummary(); as summary) {
+      <p class="filters-summary">{{ summary }}</p>
+    }
+
+    <div class="filters" id="filters" [class.open]="filtersOpen()">
+    @if (meta()) {
+      @if (cfg()) {
+        <section class="group">
+          <h2 class="group-title">{{ tx.sec_data }}</h2>
+          <div class="field">
+            <span class="label">{{ tx.dataset }}</span>
+            <app-select [options]="datasetOptions()" [label]="tx.dataset" [(value)]="dsKey" />
+          </div>
+
+          <div class="field">
+            <span class="label">{{ tx.season }}</span>
+            <app-select [options]="seasonOptions()" [label]="tx.season" [(value)]="season" />
+          </div>
+
+          @if (bounds(); as b) {
+            <div class="field">
+              <span class="label">{{ tx.period }}</span>
+              <app-range-slider [min]="b[0]" [max]="b[1]" [minGap]="minSpan" [label]="tx.period" [(value)]="period"
+                                (blocked)="onPeriodBlocked()" />
+              <p class="hint" [class.alert]="periodBlocked()" role="status">{{ tx.period_hint }}</p>
+            </div>
+          }
+        </section>
+
+        <section class="group">
+          <h2 class="group-title">{{ tx.sec_region }}</h2>
+          <div class="field">
+            <span class="label">{{ tx.region }}</span>
+            <app-select [options]="regionOptions()" [label]="tx.region" [(value)]="regionKey" />
+          </div>
+
+          @if (regionKey() === 'custom') {
+            <div class="field">
+              <span class="label">{{ tx.lat_range }}</span>
+              <app-range-slider [min]="-90" [max]="90" suffix="°" [label]="tx.lat_range" [(value)]="customLat" />
+            </div>
+            <div class="field">
+              <span class="label">{{ tx.lon_range }}</span>
+              <app-range-slider [min]="-180" [max]="180" suffix="°" [label]="tx.lon_range" [(value)]="customLon" />
+            </div>
+          }
+        </section>
+
+        <section class="group">
+          <h2 class="group-title">{{ tx.sec_stats }}</h2>
+          <label class="field">
+            <span class="label">{{ tx.alpha }} <b>{{ alpha().toFixed(2) }}</b></span>
+            <input type="range" class="single" min="0.01" max="0.10" step="0.01" [value]="alpha()"
+                   [style.--pct]="alphaPct()" (input)="setAlpha($event)" />
+          </label>
+
+          <label class="switch" [title]="tx.strict_help">
+            <input type="checkbox" role="switch" [checked]="strict()" (change)="strict.set(checked($event))" />
+            <span>{{ tx.strict }}</span>
+          </label>
+          <p class="hint">{{ tx.strict_help }}</p>
+        </section>
+      }
+    }
+    </div>
+  </aside>
+
+  <!-- ---------- основная часть ---------- -->
+  <main class="main" [class.stale]="loading() && shown()">
+    <div class="main-inner">
+      @if (loading()) {
+        <span class="sr-only" role="status">{{ tx.computing }}</span>
+      }
+
+      @if (metaFailed()) {
+        <p class="notice error">
+          <span>
+            @for (part of codeParts(tx.api_error); track $index) {
+              @if (part.code) { <code>{{ part.text }}</code> } @else { {{ part.text }} }
+            }
+          </span>
+        </p>
+      } @else if (!meta()) {
+        <p class="status">{{ tx.loading }}</p>
+      } @else if (!cfg()) {
+        <p class="notice error">
+          <span>
+            @for (part of codeParts(tx.no_data); track $index) {
+              @if (part.code) { <code>{{ part.text }}</code> } @else { {{ part.text }} }
+            }
+          </span>
+        </p>
+      } @else {
+        @if (tooShort()) {
+          <p class="notice warn" role="status">{{ tx.short_period }}</p>
+        }
+        @if (failed()) {
+          <p class="notice error">
+            <span>
+              @for (part of codeParts(tx.api_error); track $index) {
+                @if (part.code) { <code>{{ part.text }}</code> } @else { {{ part.text }} }
+              }
+            </span>
+          </p>
+        }
+        @if (exportFailed()) {
+          <p class="notice error">{{ tx.export_error }}</p>
+        }
+        @if (loading() && !shown()) {
+          <p class="status">{{ tx.computing }}</p>
+        }
+
+        @if (shown(); as v) {
+          <!-- шапка -->
+          <header class="hero">
+            <div class="chips">
+              <span class="chip">{{ v.cfg.names[lang] }}</span>
+              <span class="chip">{{ tx.seasons[v.req.season] }}</span>
+              <span class="chip">{{ v.regionName }}</span>
+            </div>
+            <h1 class="hero-title">{{ tx.title }}</h1>
+            <p class="hero-sub">{{ tx.tagline }}</p>
+            @if (v.region; as r) {
+              <div class="stripes">
+                @for (s of r.stripes; track $index) {
+                  <span [style.background]="s.color" [style.--i]="$index" [title]="s.title"></span>
+                }
+              </div>
+              <div class="stripe-axis">
+                <span>{{ v.y0 }}</span>
+                <span class="cap">{{ r.stripesCaption }}</span>
+                <span>{{ v.y1 }}</span>
+              </div>
+            }
+          </header>
+
+          @if (v.cfg.demo) {
+            <p class="notice warn">
+              <span>
+                @for (part of codeParts(tx.demo_warning); track $index) {
+                  @if (part.code) { <code>{{ part.text }}</code> } @else { {{ part.text }} }
+                }
+              </span>
+            </p>
+          }
+
+          @if (v.region; as r) {
+            <!-- четыре ответа на вопросы задания -->
+            <section class="kpis">
+              @for (k of r.kpis; track k.label) {
+                <div class="kpi">
+                  <div class="k">{{ k.label }}</div>
+                  <div class="v" [style.color]="k.color">
+                    @if (k.icon) { <span aria-hidden="true">{{ k.icon }}</span> }
+                    @if (k.sig !== null) { <span class="dot" [class.ok]="k.sig"></span> }
+                    <span>{{ k.value }}</span>
+                  </div>
+                  <div class="s">{{ k.sub }}</div>
+                </div>
+              }
+            </section>
+
+            <section class="finding">
+              <span class="finding-label">{{ tx.finding_label }}</span>
+              <p>{{ r.finding }}</p>
+            </section>
+
+            <!-- вкладки -->
+            <section class="card">
+              <div class="card-head">
+                <div class="tabs" role="tablist">
+                  @for (t of tabs(); track t.key) {
+                    <button type="button" role="tab" [attr.aria-selected]="tab() === t.key"
+                            [class.on]="tab() === t.key" (click)="tab.set(t.key)">{{ t.label }}</button>
+                  }
+                </div>
+                <div class="downloads">
+                  <button type="button" class="btn" [title]="tx.download_csv" (click)="downloadCsv()">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M7 1.5v8M3.8 6.5 7 9.7l3.2-3.2M2 12.5h10" />
+                    </svg>
+                    CSV
+                  </button>
+                  <button type="button" class="btn" [title]="tx.download_pdf" [disabled]="!!exporting()"
+                          (click)="exportReport('pdf')">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M7 1.5v8M3.8 6.5 7 9.7l3.2-3.2M2 12.5h10" />
+                    </svg>
+                    {{ exporting() === 'pdf' ? tx.exporting : 'PDF' }}
+                  </button>
+                  <button type="button" class="btn" [title]="tx.download_docx" [disabled]="!!exporting()"
+                          (click)="exportReport('docx')">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M7 1.5v8M3.8 6.5 7 9.7l3.2-3.2M2 12.5h10" />
+                    </svg>
+                    {{ exporting() === 'docx' ? tx.exporting : 'Word' }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="panel" role="tabpanel">
+                @switch (tab()) {
+                  @case ('map') {
+                    <div class="panel-head">
+                      <div>
+                        <h3>{{ r.mapTitle }}</h3>
+                        <p class="caption">{{ tx.map_note }} @if (!narrow()) { {{ tx.map_hint }} }</p>
+                      </div>
+                      <div class="map-tools">
+                        @if (mapPlot()?.moved()) {
+                          <button type="button" class="btn reset-view" (click)="mapPlot()?.resetView()">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                                 stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M2 7a5 5 0 1 0 1.6-3.7M2 2.2v2.6h2.6" />
+                            </svg>
+                            {{ tx.reset_view }}
+                          </button>
+                        }
+                        <label class="switch">
+                          <input type="checkbox" role="switch" [checked]="zoom()" (change)="zoom.set(checked($event))" />
+                          <span>{{ tx.zoom }}</span>
+                        </label>
+                      </div>
+                    </div>
+                    @if (mapFigure(); as fig) {
+                      <app-plot #mapPlot class="plot-map" [figure]="fig" />
+                    }
+                    <div class="two-col">
+                      @for (h of r.hotspots; track h.title) {
+                        <div>
+                          <h3>{{ h.title }}</h3>
+                          @if (h.rows.length) {
+                            <div class="table-wrap">
+                              <table>
+                                <thead>
+                                  <tr>
+                                    <th>{{ tx.col_lat }}</th><th>{{ tx.col_lon }}</th>
+                                    <th class="num">{{ tx.col_trend }}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  @for (row of h.rows; track $index) {
+                                    <tr>
+                                      <td>{{ row.lat }}</td><td>{{ row.lon }}</td>
+                                      <td class="num strong">{{ row.trend }}</td>
+                                    </tr>
+                                  }
+                                </tbody>
+                              </table>
+                            </div>
+                          } @else {
+                            <p class="empty">{{ tx.hot_none }}</p>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                  @case ('series') {
+                    <div class="panel-head"><h3>{{ r.seriesTitle }}</h3></div>
+                    @if (seriesFigure(); as fig) {
+                      <app-plot class="plot-series" [figure]="fig" />
+                    }
+                  }
+                  @case ('rank') {
+                    <div class="panel-head">
+                      <div>
+                        <h3>{{ tx.rank_title }}</h3>
+                        <p class="caption">{{ tx.rank_text }}</p>
+                      </div>
+                    </div>
+                    @if (rankFigure(); as fig) {
+                      <app-plot [figure]="fig" />
+                      <div class="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>{{ tx.col_region }}</th><th class="num">{{ tx.col_trend }}</th>
+                              <th class="num">{{ tx.col_total }}</th><th class="num">{{ tx.col_p }}</th>
+                              <th>{{ tx.col_sig }}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (row of r.rankTable; track row.name) {
+                              <tr>
+                                <td class="strong">{{ row.name }}</td><td class="num">{{ row.trend }}</td>
+                                <td class="num">{{ row.total }}</td><td class="num">{{ row.p }}</td>
+                                <td><span class="badge" [class.ok]="row.significant">{{ row.sig }}</span></td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    }
+                  }
+                  @case ('compare') {
+                    <div class="panel-head">
+                      <div>
+                        <h3>{{ tx.compare_title }}</h3>
+                        <p class="caption">{{ tx.compare_text }}</p>
+                      </div>
+                    </div>
+                    @if (compare(); as c) {
+                      <p class="verdict">{{ c.verdict }}</p>
+                      <div class="compare">
+                        @for (side of c.panels; track $index) {
+                          <section class="compare-side">
+                            <app-select [options]="c.options" [label]="tx.region" [value]="side.key"
+                                        (valueChange)="$index === 0 ? compareA.set($event) : compareB.set($event)" />
+                            <div class="compare-stats">
+                              <div><span>{{ tx.col_trend }}</span><b>{{ side.trend }}</b></div>
+                              <div><span>{{ tx.col_total }}</span><b>{{ side.total }}</b></div>
+                              <div><span>{{ tx.col_p }}</span><b>{{ side.p }}</b></div>
+                              <span class="badge" [class.ok]="side.significant">{{ side.sigText }}</span>
+                            </div>
+                            <app-plot [figure]="side.figure" />
+                          </section>
+                        }
+                      </div>
+                    }
+                  }
+                  @case ('method') {
+                    <div class="prose">
+                      <h3>{{ tx.method_how }}</h3>
+                      <ol>
+                        @for (step of tx.method_steps; track $index) { <li>{{ step }}</li> }
+                      </ol>
+                      <h3>{{ tx.method_limits }}</h3>
+                      <ul>
+                        @for (item of tx.method_limit_items; track $index) { <li>{{ item }}</li> }
+                      </ul>
+                      <p class="source"><b>{{ tx.source }}.</b> {{ v.cfg.source[lang] }}</p>
+                    </div>
+                  }
+                }
+              </div>
+            </section>
+          } @else {
+            <p class="notice warn">{{ tx.no_cells }}</p>
+          }
+        }
+      }
+    </div>
+  </main>
+</div>

@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+numpy
+pandas
+scipy
+xarray
+netCDF4
+# only for download_data.py: reading the public NASA POWER store (snow, precipitation)
+zarr
+fsspec
+aiohttp
